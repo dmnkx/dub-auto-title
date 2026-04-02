@@ -1,4 +1,5 @@
 import axios from "axios";
+import { sleep } from "./lib/sleep.js";
 
 /**
  * Gemini generateContent API 호출 (재시도/백오프 포함).
@@ -15,7 +16,6 @@ export async function geminiGenerateContent(prompt, config, generationConfig) {
   const baseMs = Math.max(500, Number(config.geminiRetryBaseMs) || 2000);
 
   const MAX_BACKOFF_MS = 120_000;
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${encodeURIComponent(
     config.geminiApiKey

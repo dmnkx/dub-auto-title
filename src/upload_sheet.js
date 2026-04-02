@@ -27,6 +27,21 @@ function loadServiceAccount(config) {
 
 /**
  * @param {{ keyword: string; titles: string[] }[]} batch
+ * @param {string} runDate YYYY-MM-DD
+ * @returns {string[][]} [[runDate, keyword, title], ...]
+ */
+function buildSheetValues(batch, runDate) {
+  const values = [];
+  for (const { keyword, titles } of batch) {
+    for (const title of titles) {
+      values.push([runDate, keyword, title]);
+    }
+  }
+  return values;
+}
+
+/**
+ * @param {{ keyword: string; titles: string[] }[]} batch
  * @param {SheetsConfig} config
  */
 export async function uploadAllTitles(batch, config) {
@@ -44,12 +59,7 @@ export async function uploadAllTitles(batch, config) {
   const sheets = google.sheets({ version: "v4", auth });
 
   const runDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const values = [];
-  for (const { keyword, titles } of batch) {
-    for (const title of titles) {
-      values.push([runDate, keyword, title]);
-    }
-  }
+  const values = buildSheetValues(batch, runDate);
 
   if (values.length === 0) {
     console.log("  (업로드할 행 없음)");
