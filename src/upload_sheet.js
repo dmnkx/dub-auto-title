@@ -19,7 +19,7 @@ function loadServiceAccount(config) {
   const p = config.serviceAccountJsonPath;
   if (!fs.existsSync(p)) {
     throw new Error(
-      `서비스 계정 JSON을 찾을 수 없습니다: ${p}\nconfig/user.config.js의 serviceAccountJsonPath를 확인하거나, GOOGLE_SERVICE_ACCOUNT_JSON 환경 변수를 설정하세요.`
+      `서비스 계정 JSON을 찾을 수 없습니다: ${p}\nSERVICE_ACCOUNT_JSON_PATH 환경 변수를 설정하거나, GOOGLE_SERVICE_ACCOUNT 환경 변수(= JSON 문자열)를 사용하세요.`
     );
   }
   return JSON.parse(fs.readFileSync(p, "utf8"));
@@ -32,7 +32,7 @@ function loadServiceAccount(config) {
 export async function uploadAllTitles(batch, config) {
   if (!config.spreadsheetId) {
     throw new Error(
-      "스프레드시트 ID가 필요합니다. config/user.config.js 또는 SPREADSHEET_ID 환경 변수를 설정하세요."
+      "스프레드시트 ID가 필요합니다. `SPREADSHEET_ID`(또는 `GOOGLE_SHEET_ID`) 환경 변수를 설정하세요."
     );
   }
 

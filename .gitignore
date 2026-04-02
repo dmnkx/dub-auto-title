@@ -14,7 +14,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-# 로컬 전용 설정 (예시는 user.config.example.js)
+# 로컬 전용 설정 (gitignored)
 config/user.config.js
 config/service-account.json
 
