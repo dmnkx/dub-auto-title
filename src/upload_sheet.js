@@ -66,6 +66,7 @@ export async function uploadAllTitles(batch, config) {
     return;
   }
 
+  console.log(`  · 업로드 range: ${config.sheetRange}`);
   await sheets.spreadsheets.values.append({
     spreadsheetId: config.spreadsheetId,
     range: config.sheetRange,
