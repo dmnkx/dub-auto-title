@@ -1,6 +1,7 @@
 name: Keyword Titles
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 10 * * *'  # 매일 10시 실행
 
