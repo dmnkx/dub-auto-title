@@ -3,13 +3,18 @@ name: Keyword Titles
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 10 * * *'  # 매일 10시 실행
+    - cron: '0 1 * * *'  # cron은 UTC기준이므로 +9를 하면 한국시간으로 10시로 설정
 
 jobs:
   generate-titles:
     runs-on: ubuntu-latest
+    environment: dub
     steps:
       - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '24'
       - name: Install Dependencies
         run: npm install
       - name: Generate Titles and Upload
@@ -18,5 +23,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-          SHEET_RANGE: "시트1!A:D"
+          SHEET_RANGE: "시트1!A:C"
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

@@ -87,7 +87,7 @@ export function resolveConfig() {
       12,
     spreadsheetId,
     sheetRange:
-      process.env.SHEET_RANGE ?? userConfig.sheetRange ?? "시트1!A:D",
+      process.env.SHEET_RANGE ?? userConfig.sheetRange ?? "시트1!A:C",
     serviceAccountJsonPath,
     /** CI에서만 주입하는 경우 */
     serviceAccountJsonRaw:

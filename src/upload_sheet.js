@@ -27,17 +27,38 @@ function loadServiceAccount(config) {
 
 /**
  * @param {{ keyword: string; titles: string[] }[]} batch
- * @param {string} runDate YYYY-MM-DD
- * @returns {string[][]} [[runDate, keyword, title], ...]
+ * @param {string} runAt YYYY-MM-DD HH:mm:ss
+ * @returns {string[][]} [[runAt, keyword, title], ...]
  */
-function buildSheetValues(batch, runDate) {
+function buildSheetValues(batch, runAt) {
   const values = [];
   for (const { keyword, titles } of batch) {
     for (const title of titles) {
-      values.push(["", runDate, keyword, title]);
+      // `sheetRange`가 A:C(3열)일 때 값도 정확히 3열로만 매칭합니다.
+      values.push([runAt, keyword, title]);
     }
   }
   return values;
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Asia/Seoul 기준 타임스탬프
+ * @param {Date} [d]
+ * @returns {string} YYYY-MM-DD HH:mm:ss
+ */
+function formatKstTimestamp(d = new Date()) {
+  // KST는 DST가 없어서 "UTC+9"로 고정 오프셋 변환만 하면 됩니다.
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  // Sheets에서 날짜/시간으로 파싱되기 쉬운 ISO-8601 형태로 보냅니다.
+  return `${kst.getUTCFullYear()}-${pad2(kst.getUTCMonth() + 1)}-${pad2(
+    kst.getUTCDate()
+  )}T${pad2(kst.getUTCHours())}:${pad2(kst.getUTCMinutes())}:${pad2(
+    kst.getUTCSeconds()
+  )}+09:00`;
 }
 
 /**
@@ -58,8 +79,8 @@ export async function uploadAllTitles(batch, config) {
   });
   const sheets = google.sheets({ version: "v4", auth });
 
-  const runDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const values = buildSheetValues(batch, runDate);
+  const runAt = formatKstTimestamp(); // YYYY-MM-DD HH:mm:ss
+  const values = buildSheetValues(batch, runAt);
 
   if (values.length === 0) {
     console.log("  (업로드할 행 없음)");
@@ -67,10 +88,12 @@ export async function uploadAllTitles(batch, config) {
   }
 
   console.log(`  · 업로드 range: ${config.sheetRange}`);
+  console.log(`  · 업로드 첫 행 예시: ${JSON.stringify(values[0])}`);
   await sheets.spreadsheets.values.append({
     spreadsheetId: config.spreadsheetId,
     range: config.sheetRange,
-    valueInputOption: "RAW",
+    // USER_ENTERED여야 Sheets가 날짜/시간 문자열을 날짜형으로 파싱합니다.
+    valueInputOption: "USER_ENTERED",
     requestBody: { values },
   });
 
