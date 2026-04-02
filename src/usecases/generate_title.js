@@ -40,6 +40,7 @@ async function generateTitle(keyword, config) {
   let titles = [];
   /** @type {string | undefined} */
   let lastFinishReason;
+  const apiDelayMs = 12_000; // Gemini 호출 간 고정 간격
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt === 1) {
@@ -73,6 +74,8 @@ async function generateTitle(keyword, config) {
 
     const raw = cand?.content?.parts?.map((p) => p.text).join("") ?? "";
     titles = parseTitlesFromResponse(raw);
+    const shouldTryAgain = titles.length !== 5 && attempt < 2;
+    if (shouldTryAgain) await sleep(apiDelayMs);
     if (titles.length === 5) break;
   }
 
@@ -107,7 +110,7 @@ export async function generateAllTitles(config) {
     .filter(Boolean);
 
   const results = [];
-  const gap = Math.max(0, Number(config.delayBetweenKeywordsMs) || 0);
+  const gap = 12_000; // 다음 키워드의 다음 Gemini 호출을 위해 고정 간격
 
   for (let i = 0; i < list.length; i++) {
     const trimmed = list[i];
