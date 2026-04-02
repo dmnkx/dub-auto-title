@@ -1,0 +1,14 @@
+{
+  "name": "dub-auto-title",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "setup-config": "test -f config/user.config.js || cp config/user.config.example.js config/user.config.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "googleapis": "^121.0.0",
+    "fs-extra": "^11.1.1"
+  }
+}
