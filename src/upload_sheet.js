@@ -34,7 +34,7 @@ function buildSheetValues(batch, runDate) {
   const values = [];
   for (const { keyword, titles } of batch) {
     for (const title of titles) {
-      values.push([runDate, keyword, title]);
+      values.push(["", runDate, keyword, title]);
     }
   }
   return values;
