@@ -61,7 +61,7 @@ export function resolveConfig() {
   return {
     geminiApiKey,
     geminiModel:
-      process.env.GEMINI_MODEL ?? userConfig.geminiModel ?? "gemini-2.0-flash",
+      process.env.GEMINI_MODEL ?? userConfig.geminiModel ?? "gemini-2.5-flash",
     geminiRetryMax: envNum("GEMINI_RETRY_MAX", userConfig.geminiRetryMax ?? 6),
     geminiRetryBaseMs: envNum(
       "GEMINI_RETRY_BASE_MS",
