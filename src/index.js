@@ -1,7 +1,7 @@
 import { resolveConfig } from "./config.js";
-import { generateAllTitles } from "./generate_title.js";
-import { uploadAllTitles } from "./upload_sheet.js";
-import { notifyDiscord } from "./discord_notify.js";
+import { generateAllTitles } from "./usecases/generate_title.js";
+import { uploadAllTitles } from "./usecases/upload_sheet.js";
+import { notifyDiscord } from "./services/discord_notify.js";
 
 export { resolveConfig, projectRoot } from "./config.js";
 
