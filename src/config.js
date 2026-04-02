@@ -86,7 +86,8 @@ export function resolveConfig() {
       userConfig.newsHeadlineLimit ||
       12,
     spreadsheetId,
-    sheetRange: process.env.SHEET_RANGE ?? userConfig.sheetRange ?? "Sheet1!A:B",
+    sheetRange:
+      process.env.SHEET_RANGE ?? userConfig.sheetRange ?? "Sheet1!A:C",
     serviceAccountJsonPath,
     /** CI에서만 주입하는 경우 */
     serviceAccountJsonRaw:

@@ -43,10 +43,11 @@ export async function uploadAllTitles(batch, config) {
   });
   const sheets = google.sheets({ version: "v4", auth });
 
+  const runDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const values = [];
   for (const { keyword, titles } of batch) {
     for (const title of titles) {
-      values.push([keyword, title]);
+      values.push([runDate, keyword, title]);
     }
   }
 
