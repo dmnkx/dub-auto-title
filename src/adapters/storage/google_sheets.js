@@ -1,10 +1,6 @@
 import fs from "fs";
 import { google } from "googleapis";
 
-/**
- * 서비스 계정 로딩
- * @param {{ serviceAccountJsonPath: string; serviceAccountJsonRaw: string | null }} config
- */
 function loadServiceAccount(config) {
   if (config.serviceAccountJsonRaw) {
     return JSON.parse(config.serviceAccountJsonRaw);
@@ -19,10 +15,6 @@ function loadServiceAccount(config) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
-/**
- * Google Sheets client 생성
- * @param {{ serviceAccountJsonPath: string; serviceAccountJsonRaw: string | null }} config
- */
 function createSheetsClient(config) {
   const credentials = loadServiceAccount(config);
   const auth = new google.auth.GoogleAuth({
@@ -33,18 +25,19 @@ function createSheetsClient(config) {
 }
 
 /**
- * 시트에 값 append
- * @param {{ spreadsheetId: string; serviceAccountJsonPath: string; serviceAccountJsonRaw: string | null }} config
- * @param {string} range A1 range
- * @param {any[][]} values
+ * @param {object} config spreadsheetId, serviceAccountJsonPath, serviceAccountJsonRaw
+ * @returns {{ appendRows: (range: string, values: any[][]) => Promise<void> }}
  */
-export async function appendSheetValues(config, range, values) {
-  const sheets = createSheetsClient(config);
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: config.spreadsheetId,
-    range,
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values },
-  });
+export function createGoogleSheetsStorage(config) {
+  return {
+    async appendRows(range, values) {
+      const sheets = createSheetsClient(config);
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: config.spreadsheetId,
+        range,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values },
+      });
+    },
+  };
 }
-

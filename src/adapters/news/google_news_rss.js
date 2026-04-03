@@ -14,7 +14,7 @@ function decodeXmlEntities(s) {
 }
 
 /**
- * 키워드로 Google 뉴스 RSS를 조회해 최근 보도 제목 목록을 만든다.
+ * Google News RSS로 최근 보도 제목 목록
  * @param {string} keyword
  * @param {{ newsHeadlineLimit: number }} config
  * @returns {Promise<string[]>}
@@ -55,3 +55,11 @@ export async function fetchRecentIssueHeadlines(keyword, config) {
   }
 }
 
+/**
+ * @returns {{ fetchHeadlines: typeof fetchRecentIssueHeadlines }}
+ */
+export function createGoogleNewsRssSource() {
+  return {
+    fetchHeadlines: fetchRecentIssueHeadlines,
+  };
+}

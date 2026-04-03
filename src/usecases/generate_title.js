@@ -1,4 +1,5 @@
-import { geminiGenerateContent } from "../services/gemini_api.js";
+import { createLlmClient } from "../adapters/llm/factory.js";
+import { createNewsSource } from "../adapters/news/factory.js";
 import {
   buildPromptFromIssues,
   buildRegenerateHint,
@@ -6,14 +7,18 @@ import {
 import { sleep } from "../lib/sleep.js";
 import { parseTitlesFromResponse } from "../lib/title_parser.js";
 import { loadKeywords } from "../keywords.js";
-import { fetchRecentIssueHeadlines } from "../services/news_rss.js";
 
 /**
  * @typedef {object} AppConfig
+ * @property {string} llmProvider
  * @property {string} geminiApiKey
+ * @property {string} openaiApiKey
  * @property {string} geminiModel
+ * @property {string} openaiModel
  * @property {number} geminiRetryMax
  * @property {number} geminiRetryBaseMs
+ * @property {number} openaiRetryMax
+ * @property {number} openaiRetryBaseMs
  * @property {number} delayBetweenKeywordsMs
  * @property {number} geminiMaxOutputTokens
  * @property {number} newsHeadlineLimit
@@ -22,9 +27,11 @@ import { fetchRecentIssueHeadlines } from "../services/news_rss.js";
 /**
  * @param {string} keyword
  * @param {AppConfig} config
+ * @param {import("../adapters/llm/types.js").LlmClient} llm
+ * @param {{ fetchHeadlines: (k: string, c: AppConfig) => Promise<string[]> }} news
  */
-async function generateTitle(keyword, config) {
-  const headlines = await fetchRecentIssueHeadlines(keyword, config);
+async function generateTitle(keyword, config, llm, news) {
+  const headlines = await news.fetchHeadlines(keyword, config);
   if (headlines.length > 0) {
     console.log(`    → 최근 뉴스 ${headlines.length}건 반영`);
   } else {
@@ -40,7 +47,7 @@ async function generateTitle(keyword, config) {
   let titles = [];
   /** @type {string | undefined} */
   let lastFinishReason;
-  const apiDelayMs = 12_000; // Gemini 호출 간 고정 간격
+  const apiDelayMs = 12_000;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt === 1) {
@@ -56,24 +63,19 @@ async function generateTitle(keyword, config) {
     const bumpTokens = attempt === 2 || lastFinishReason === "MAX_TOKENS";
     const maxOutputTokens = bumpTokens ? 8192 : baseOutTok;
 
-    const data = await geminiGenerateContent(
-      basePrompt,
-      config,
-      {
-        maxOutputTokens,
-        temperature: attempt === 0 ? 0.55 : 0.45,
-        responseMimeType: "application/json",
-      }
-    );
+    const { text: raw, finishReason } = await llm.generate(basePrompt, {
+      maxOutputTokens,
+      temperature: attempt === 0 ? 0.55 : 0.45,
+      responseMimeType: "application/json",
+    });
 
-    const cand = data?.candidates?.[0];
-    lastFinishReason = cand?.finishReason;
-    if (lastFinishReason && lastFinishReason !== "STOP") {
-      console.warn(`    → Gemini finishReason: ${lastFinishReason}`);
+    lastFinishReason = finishReason;
+    const fr = lastFinishReason ? String(lastFinishReason) : "";
+    if (fr && fr.toUpperCase() !== "STOP") {
+      console.warn(`    → LLM finishReason: ${lastFinishReason}`);
     }
 
-    const raw = cand?.content?.parts?.map((p) => p.text).join("") ?? "";
-    titles = parseTitlesFromResponse(raw);
+    titles = parseTitlesFromResponse(raw ?? "");
     const shouldTryAgain = titles.length !== 5 && attempt < 2;
     if (shouldTryAgain) await sleep(apiDelayMs);
     if (titles.length === 5) break;
@@ -94,11 +96,8 @@ async function generateTitle(keyword, config) {
  * @returns {Promise<{ keyword: string; titles: string[] }[]>}
  */
 export async function generateAllTitles(config) {
-  if (!config.geminiApiKey) {
-    throw new Error(
-      "Gemini API 키가 필요합니다. `GEMINI_API_KEY` 환경 변수를 설정하세요."
-    );
-  }
+  const llm = createLlmClient(config);
+  const news = createNewsSource(config);
 
   const keywords = loadKeywords();
   if (!Array.isArray(keywords) || keywords.length === 0) {
@@ -110,12 +109,12 @@ export async function generateAllTitles(config) {
     .filter(Boolean);
 
   const results = [];
-  const gap = 12_000; // 다음 키워드의 다음 Gemini 호출을 위해 고정 간격
+  const gap = 12_000;
 
   for (let i = 0; i < list.length; i++) {
     const trimmed = list[i];
     console.log(`  · 제목 생성: "${trimmed}"`);
-    const titles = await generateTitle(trimmed, config);
+    const titles = await generateTitle(trimmed, config, llm, news);
     results.push({ keyword: trimmed, titles });
 
     if (gap > 0 && i < list.length - 1) {

@@ -4,9 +4,9 @@
 
 1. `config/keywords.json`에 있는 키워드들을 가져옵니다.
 2. 각 키워드로 Google 뉴스 RSS를 조회해서 최근 기사 제목(단서)을 모읍니다.
-3. Gemini(AI)로 “블로그 글 제목 후보 5개”를 생성합니다.
-4. 생성된 결과를 Google Sheets에 업로드합니다.
-5. (선택) 작업이 끝나면 Discord로 알림을 보냅니다.
+3. 설정한 LLM(Gemini 또는 OpenAI 등)으로 “블로그 글 제목 후보 5개”를 생성합니다.
+4. 생성된 결과를 저장소(기본: Google Sheets)에 업로드합니다.
+5. (선택) 작업이 끝나면 알림 채널(Discord 또는 Slack 등)로 알림을 보냅니다.
 
 처음 개발을 배우는 학생도 바로 실행할 수 있도록, 아래에 “준비물 → 설정 → 실행 → 확인” 순서로 설명합니다.
 
@@ -17,10 +17,10 @@
 아래 항목이 필요합니다.
 
 - Node.js 18+ (가능하면 20+)
-- Gemini API 키
+- LLM API 키(기본은 Gemini: `GEMINI_API_KEY`, OpenAI로 바꿀 때는 `OPENAI_API_KEY`)
 - Google Sheets 접근 권한(서비스 계정 or CI에서 제공되는 JSON)
 - Google Sheets 스프레드시트 ID
-- (선택) Discord Webhook URL
+- (선택) 알림 Webhook URL (`DISCORD_WEBHOOK_URL` 또는 Slack용 `SLACK_WEBHOOK_URL`)
 
 ---
 
@@ -28,9 +28,9 @@
 
 이 프로젝트는 기능을 섞지 않도록 폴더 규칙을 지켜서 나눴습니다.
 
-- `src/services/`
-  - 외부 연동(네트워크/외부 API)을 담당합니다.
-  - 예: Google Sheets 업로드, Google News RSS 조회, Gemini 호출, Discord 알림
+- `src/adapters/`
+  - 외부 시스템을 **같은 인터페이스로 감싼 뒤**, 팩토리로 구현체를 고릅니다.
+  - 예: LLM(Gemini/OpenAI), 알림(Discord/Slack), 저장소(Google Sheets), 뉴스 RSS
 - `src/usecases/`
   - “실제 실행 흐름”을 조립합니다.
   - 예: 키워드별 제목 생성 흐름, 시트 업로드 흐름
@@ -75,11 +75,21 @@ Sheets에서 `A열`을 기준으로 `arrayformula` 같은 계산을 하고 있�
 
 이 파일에 키워드를 넣으면, 프로젝트가 자동으로 각 키워드에 대해 제목 5개씩 생성합니다.
 
-### 4.2 Gemini 설정
+### 4.2 LLM (제목 생성 AI) 설정
 
-- 환경 변수: `GEMINI_API_KEY`
+- 기본 제공자: `LLM_PROVIDER` 없으면 **gemini**
+  - `gemini`: 환경 변수 `GEMINI_API_KEY` 필요
+  - `openai`: 환경 변수 `OPENAI_API_KEY` 필요 (ChatGPT API 계열)
+- 모델 이름(선택)
+  - Gemini: `GEMINI_MODEL` (기본 `gemini-2.5-flash`)
+  - OpenAI: `OPENAI_MODEL` (기본 `gpt-4o-mini`)
 
-Gemini API 키를 넣어야 합니다.
+예시(OpenAI 사용):
+
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=...
+```
 
 ### 4.3 Google Sheets 설정
 
@@ -100,10 +110,14 @@ Gemini API 키를 넣어야 합니다.
 
 시트 탭 이름이 `시트1`이 아니거나, 범위를 바꾸고 싶다면 `SHEET_RANGE`를 수정하세요.
 
-### 4.5 (선택) Discord 알림
+### 4.5 (선택) 알림 (Discord / Slack)
 
-- 환경 변수: `DISCORD_WEBHOOK_URL`
-  - 이 값이 없으면 Discord 알림은 보내지 않습니다(no-op).
+- `NOTIFY_PROVIDER` (기본값: `discord`)
+  - `discord`: `DISCORD_WEBHOOK_URL` 이 있으면 전송
+  - `slack`: `SLACK_WEBHOOK_URL` 이 있으면 전송 (Incoming Webhook)
+  - `none`: 알림 안 함
+
+Webhook URL이 없으면 해당 제공자는 알림을 보내지 않습니다(no-op).
 
 ---
 
@@ -117,10 +131,10 @@ Gemini API 키를 넣어야 합니다.
 2. 환경 변수 설정
    - `.env` 파일을 쓰든, 터미널에서 `export` 하든 상관 없습니다.
    - 필요한 값:
-     - `GEMINI_API_KEY`
+     - LLM: `GEMINI_API_KEY`(기본) 또는 `LLM_PROVIDER=openai` + `OPENAI_API_KEY`
      - `SPREADSHEET_ID`
      - (로컬) `config/service-account.json` 파일 준비
-     - (선택) `DISCORD_WEBHOOK_URL`
+     - (선택) `DISCORD_WEBHOOK_URL` 또는 `SLACK_WEBHOOK_URL`, `NOTIFY_PROVIDER`
      - (선택) `SHEET_RANGE`
 
 3. 실행
@@ -141,11 +155,11 @@ Gemini API 키를 넣어야 합니다.
 이 레포는 `.github/workflows/generate.yml`에서 매일 실행되도록 설정되어 있습니다.
 
 - 스케줄: 매일 01:00 UTC(UTC 기준, 한국 시간으로는 +9)
-- 사용되는 시크릿:
-  - `GEMINI_API_KEY`
+- 사용되는 시크릿(예시):
+  - `GEMINI_API_KEY` (또는 OpenAI 사용 시 `OPENAI_API_KEY` + `LLM_PROVIDER=openai`)
   - `GOOGLE_SERVICE_ACCOUNT`
   - `SPREADSHEET_ID`
-  - `DISCORD_WEBHOOK_URL` (선택)
+  - `DISCORD_WEBHOOK_URL` 또는 `SLACK_WEBHOOK_URL` (선택, `NOTIFY_PROVIDER`와 함께)
 
 CI에서는 로컬에 `config/service-account.json` 파일이 없어도 동작하도록,
 `GOOGLE_SERVICE_ACCOUNT`로 인증 정보를 주입합니다.

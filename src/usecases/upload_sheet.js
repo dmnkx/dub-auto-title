@@ -1,5 +1,5 @@
 import { formatKstTimestamp } from "../lib/time.js";
-import { appendSheetValues } from "../services/google_sheets.js";
+import { createSheetStorage } from "../adapters/storage/factory.js";
 
 /**
  * @typedef {object} SheetsConfig
@@ -7,12 +7,13 @@ import { appendSheetValues } from "../services/google_sheets.js";
  * @property {string} sheetRange
  * @property {string} serviceAccountJsonPath
  * @property {string | null} [serviceAccountJsonRaw]
+ * @property {string} [storageProvider]
  */
 
 /**
  * @param {{ keyword: string; titles: string[] }[]} batch
- * @param {string} runAt YYYY-MM-DD HH:mm:ss
- * @returns {string[][]} [[runAt, keyword, title], ...]
+ * @param {string} runAt
+ * @returns {string[][]}
  */
 function buildSheetValues(batch, runAt) {
   const values = [];
@@ -36,7 +37,8 @@ export async function uploadAllTitles(batch, config) {
     );
   }
 
-  const runAt = formatKstTimestamp(); // YYYY-MM-DD HH:mm:ss
+  const storage = createSheetStorage(config);
+  const runAt = formatKstTimestamp();
   const values = buildSheetValues(batch, runAt);
 
   if (values.length === 0) {
@@ -46,7 +48,7 @@ export async function uploadAllTitles(batch, config) {
 
   console.log(`  · 업로드 range: ${config.sheetRange}`);
   console.log(`  · 업로드 첫 행 예시: ${JSON.stringify(values[0])}`);
-  await appendSheetValues(config, config.sheetRange, values);
+  await storage.appendRows(config.sheetRange, values);
 
   console.log(`  · 시트에 ${values.length}행 추가됨`);
 }

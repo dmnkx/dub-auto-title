@@ -31,10 +31,24 @@ export function resolveConfig() {
     return fallback;
   };
 
+  const llmProvider = String(
+    process.env.LLM_PROVIDER ?? userConfig.llmProvider ?? "gemini"
+  ).toLowerCase();
+
   const geminiApiKey =
     process.env.GEMINI_API_KEY ?? userConfig.geminiApiKey ?? "";
-  if (!geminiApiKey) {
-    throw new Error("Gemini API 키는 `GEMINI_API_KEY` 환경 변수로 설정하세요.");
+  const openaiApiKey =
+    process.env.OPENAI_API_KEY ?? userConfig.openaiApiKey ?? "";
+
+  if (llmProvider === "gemini" && !geminiApiKey) {
+    throw new Error(
+      "Gemini 사용 시 `GEMINI_API_KEY` 환경 변수를 설정하세요. (또는 LLM_PROVIDER=openai)"
+    );
+  }
+  if (llmProvider === "openai" && !openaiApiKey) {
+    throw new Error(
+      "OpenAI 사용 시 `OPENAI_API_KEY` 환경 변수를 설정하세요. (또는 LLM_PROVIDER=gemini)"
+    );
   }
 
   const spreadsheetId =
@@ -58,8 +72,36 @@ export function resolveConfig() {
     return resolvePathFromRoot(p);
   })();
 
+  const notifyProvider = String(
+    process.env.NOTIFY_PROVIDER ?? userConfig.notifyProvider ?? "discord"
+  ).toLowerCase();
+
+  const discordWebhookUrl =
+    process.env.DISCORD_WEBHOOK_URL ?? userConfig.discordWebhookUrl ?? "";
+  const slackWebhookUrl =
+    process.env.SLACK_WEBHOOK_URL ?? userConfig.slackWebhookUrl ?? "";
+
+  const newsSourceProvider = String(
+    process.env.NEWS_SOURCE_PROVIDER ??
+      userConfig.newsSourceProvider ??
+      "google_rss"
+  ).toLowerCase();
+
+  const storageProvider = String(
+    process.env.STORAGE_PROVIDER ?? userConfig.storageProvider ?? "google_sheets"
+  ).toLowerCase();
+
   return {
+    llmProvider,
     geminiApiKey,
+    openaiApiKey,
+    openaiModel:
+      process.env.OPENAI_MODEL ?? userConfig.openaiModel ?? "gpt-4o-mini",
+    openaiRetryMax: envNum("OPENAI_RETRY_MAX", userConfig.openaiRetryMax ?? 6),
+    openaiRetryBaseMs: envNum(
+      "OPENAI_RETRY_BASE_MS",
+      userConfig.openaiRetryBaseMs ?? 2000
+    ),
     geminiModel:
       process.env.GEMINI_MODEL ?? userConfig.geminiModel ?? "gemini-2.5-flash",
     geminiRetryMax: envNum("GEMINI_RETRY_MAX", userConfig.geminiRetryMax ?? 6),
@@ -93,5 +135,10 @@ export function resolveConfig() {
     serviceAccountJsonRaw:
       process.env.GOOGLE_SERVICE_ACCOUNT ??
       null,
+    notifyProvider,
+    discordWebhookUrl,
+    slackWebhookUrl,
+    newsSourceProvider,
+    storageProvider,
   };
 }
