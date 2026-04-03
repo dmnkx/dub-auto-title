@@ -1,5 +1,5 @@
 import axios from "axios";
-import { sleep } from "./lib/sleep.js";
+import { sleep } from "../lib/sleep.js";
 
 /**
  * Gemini generateContent API 호출 (재시도/백오프 포함).
