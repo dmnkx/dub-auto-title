@@ -1,4 +1,7 @@
 import { resolveConfig } from "./config.js";
+import { countTitlesInBatch } from "./lib/batch_titles.js";
+import { logResolvedConfigSummary } from "./lib/config_summary_log.js";
+import { isLogVerbose } from "./lib/env.js";
 import { generateAllTitles } from "./usecases/generate_title.js";
 import { uploadAllTitles } from "./usecases/upload_sheet.js";
 import { createNotifyClient } from "./adapters/notify/factory.js";
@@ -9,20 +12,30 @@ export { resolveConfig, projectRoot } from "./config.js";
 let notify = null;
 
 async function main() {
+  const verbose = isLogVerbose();
   const config = resolveConfig();
+
+  if (verbose) {
+    logResolvedConfigSummary(config);
+  }
+
   notify = createNotifyClient(config);
 
+  const startedAt = Date.now();
   console.log("1. 키워드 → 제목 생성 시작");
   const batch = await generateAllTitles(config);
 
   console.log("2. Google Sheets 업로드 시작");
   await uploadAllTitles(batch, config);
 
-  const totalTitles = batch.reduce(
-    (sum, { titles }) => sum + (Array.isArray(titles) ? titles.length : 0),
-    0
+  const totalTitles = countTitlesInBatch(batch);
+
+  const elapsedMs = Date.now() - startedAt;
+  console.log(
+    `✅ 모든 작업 완료 (총 ${totalTitles}개 제목 업로드, ${Math.round(
+      elapsedMs / 1000
+    )}초)`
   );
-  console.log(`✅ 모든 작업 완료 (총 ${totalTitles}개 제목 업로드)`);
   await notify.send(`✅ dub-auto-title 완료: 총 ${totalTitles}개 제목 업로드 완료`);
 }
 

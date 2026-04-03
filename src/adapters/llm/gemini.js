@@ -1,5 +1,11 @@
 import axios from "axios";
-import { sleep } from "../../lib/sleep.js";
+import { isLogVerbose } from "../../lib/env.js";
+import {
+  axiosErrorDetailForLog,
+  axiosResponseStatus,
+  geminiLikeBackoffWait,
+  withHttpRetries,
+} from "../../lib/http_retry.js";
 
 /**
  * Gemini generateContent → 통일된 결과 형태로 반환
@@ -9,10 +15,10 @@ import { sleep } from "../../lib/sleep.js";
 export function createGeminiClient(config) {
   return {
     async generate(prompt, generationConfig) {
+      const verbose = isLogVerbose();
       const extraRetries = Math.max(0, Number(config.geminiRetryMax) || 0);
       const maxAttempts = 1 + extraRetries;
       const baseMs = Math.max(500, Number(config.geminiRetryBaseMs) || 2000);
-      const MAX_BACKOFF_MS = 120_000;
 
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${encodeURIComponent(
         config.geminiApiKey
@@ -23,53 +29,54 @@ export function createGeminiClient(config) {
         generationConfig,
       };
 
-      let lastErr;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
+      return withHttpRetries(
+        async ({ attempt }) => {
+          if (verbose) {
+            console.log(
+              `    → [Gemini HTTP] attempt ${attempt + 1}/${maxAttempts} model=${config.geminiModel} maxOutputTokens=${generationConfig?.maxOutputTokens ?? ""}`
+            );
+          }
           const { data } = await axios.post(url, payload, {
             headers: { "Content-Type": "application/json" },
           });
           const cand = data?.candidates?.[0];
           const text =
             cand?.content?.parts?.map((p) => p.text).join("") ?? "";
-          return {
-            text,
-            finishReason: cand?.finishReason,
-          };
-        } catch (err) {
-          lastErr = err;
-          const status = err.response?.status;
-          const retryable = status === 429 || status === 503 || status === 502;
-
-          if (!retryable || attempt >= maxAttempts - 1) {
-            if (status === 429) {
-              const detail =
-                err.response?.data?.error?.message ||
-                err.response?.data?.error ||
-                "";
-              throw new Error(
+          if (verbose) {
+            console.log(
+              `    → [Gemini HTTP] success textLength=${text.length} finishReason=${cand?.finishReason ?? "none"}`
+            );
+          }
+          return { text, finishReason: cand?.finishReason };
+        },
+        {
+          maxAttempts,
+          baseMs,
+          computeWaitMs: geminiLikeBackoffWait,
+          onRetry: ({
+            status,
+            waitMs,
+            attempt,
+            maxAttempts: maxA,
+            detail,
+          }) => {
+            const d = String(detail ?? "");
+            console.warn(
+              `    → [Gemini HTTP] ${status}, ${Math.ceil(waitMs / 1000)}초 대기 후 재시도 (${attempt + 1}/${maxA}), error="${d.slice(0, 200)}${d.length > 200 ? "…" : ""}"`
+            );
+          },
+          mapFinalError: (err) => {
+            if (axiosResponseStatus(err) === 429) {
+              const detail = axiosErrorDetailForLog(err);
+              return new Error(
                 `Gemini API 요청 한도(429)에 걸렸습니다. ${
                   detail ? `${detail} ` : ""
                 }잠시 후 다시 실행하거나 config의 delayBetweenKeywordsMs·geminiRetryBaseMs를 늘리세요.`
               );
             }
-            throw err;
-          }
-
-          const ra = err.response?.headers?.["retry-after"];
-          let waitMs = ra
-            ? Math.max(parseInt(ra, 10) * 1000, baseMs)
-            : baseMs * Math.pow(2, attempt);
-          waitMs = Math.min(waitMs, MAX_BACKOFF_MS);
-
-          console.warn(
-            `    → Gemini HTTP ${status}, ${Math.ceil(waitMs / 1000)}초 대기 후 재시도 (${attempt + 1}/${extraRetries})`
-          );
-          await sleep(waitMs);
+          },
         }
-      }
-
-      throw lastErr;
+      );
     },
   };
 }

@@ -65,6 +65,12 @@ Sheets에서 `A열`을 기준으로 `arrayformula` 같은 계산을 하고 있�
 
 ## 4) 설정 파일 / 환경 변수
 
+### 4.0 프로젝트 설정 파일(`config/`)
+
+- **`config/user.config.js`** (저장소에 포함): 모델명·딜레이·시트 범위 등 **비밀이 아닌** 기본값.
+- **`config/secret.config.js`** (gitignore): API 키·웹훅·서비스 계정 경로 등. 없으면 **같은 항목은 환경 변수**만 사용합니다.  
+  새로 쓸 때는 `config/secret.config.example.js`를 복사해 `secret.config.js`로 저장하면 됩니다.
+
 ### 4.1 키워드 목록
 
 - `config/keywords.json`
@@ -128,14 +134,14 @@ Webhook URL이 없으면 해당 제공자는 알림을 보내지 않습니다(no
    npm install
    ```
 
-2. 환경 변수 설정
-   - `.env` 파일을 쓰든, 터미널에서 `export` 하든 상관 없습니다.
+2. 환경 변수 또는 `config/secret.config.js`
+   - API 키 등은 `secret.config.example.js`를 복사해 `secret.config.js`에 두거나, `.env` / 터미널 `export`로 주입해도 됩니다(같은 항목은 시크릿 파일 값이 먼저 적용됩니다).
    - 필요한 값:
      - LLM: `GEMINI_API_KEY`(기본) 또는 `LLM_PROVIDER=openai` + `OPENAI_API_KEY`
-     - `SPREADSHEET_ID`
-     - (로컬) `config/service-account.json` 파일 준비
+     - `SPREADSHEET_ID`(또는 `user.config.js`의 `spreadsheetId`)
+     - (로컬) `config/service-account.json` 또는 `secret.config.js`의 경로·`googleServiceAccount`
      - (선택) `DISCORD_WEBHOOK_URL` 또는 `SLACK_WEBHOOK_URL`, `NOTIFY_PROVIDER`
-     - (선택) `SHEET_RANGE`
+     - (선택) `SHEET_RANGE` 또는 `user.config.js`
 
 3. 실행
    ```bash

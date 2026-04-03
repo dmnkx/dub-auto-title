@@ -1,5 +1,6 @@
 import fs from "fs";
 import { google } from "googleapis";
+import { isLogVerbose } from "../../lib/env.js";
 
 function loadServiceAccount(config) {
   if (config.serviceAccountJsonRaw) {
@@ -31,13 +32,30 @@ function createSheetsClient(config) {
 export function createGoogleSheetsStorage(config) {
   return {
     async appendRows(range, values) {
+      const verbose = isLogVerbose();
+
       const sheets = createSheetsClient(config);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: config.spreadsheetId,
-        range,
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values },
-      });
+      try {
+        if (verbose) {
+          const idPreview = String(config.spreadsheetId).slice(0, 6);
+          console.log(
+            `    → [Sheets] append spreadsheetId="${idPreview}…", range="${range}", rows=${values.length}`
+          );
+        }
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: config.spreadsheetId,
+          range,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values },
+        });
+        if (verbose) {
+          console.log(`    → [Sheets] append 완료`);
+        }
+      } catch (err) {
+        const msg = err?.message ?? String(err);
+        console.error(`    → [Sheets] append 실패: ${msg}`);
+        throw err;
+      }
     },
   };
 }

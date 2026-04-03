@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import { fileURLToPath } from "url";
+import { readEnvNumber } from "./lib/env.js";
+import { loadNamedExportFromJsFile } from "./lib/load_js_export.js";
+import { trimmedOrEmpty } from "./lib/string.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -8,46 +11,47 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const projectRoot = path.join(__dirname, "..");
 
 const userConfigPath = path.join(projectRoot, "config", "user.config.js");
+const secretConfigPath = path.join(projectRoot, "config", "secret.config.js");
 
-/** 로컬 설정(있으면 로드, CI에서는 보통 파일이 없어도 동작하도록 빈 객체) */
-let userConfig = {};
-try {
-  if (fs.existsSync(userConfigPath)) {
-    const mod = await import(pathToFileURL(userConfigPath).href);
-    userConfig = mod?.userConfig ?? {};
-  }
-} catch {
-  userConfig = {};
+/** 공개 기본 설정(저장소에 포함되는 `user.config.js`) */
+const userConfig = await loadNamedExportFromJsFile(userConfigPath, "userConfig");
+
+/** 로컬 시크릿(`secret.config.js` 없으면 빈 객체 → 환경 변수만 사용) */
+const secretConfig = await loadNamedExportFromJsFile(
+  secretConfigPath,
+  "secretConfig"
+);
+
+function rawServiceAccountFromSecretOrEnv() {
+  const fromSecret = trimmedOrEmpty(secretConfig.googleServiceAccount);
+  const fromEnv = trimmedOrEmpty(process.env.GOOGLE_SERVICE_ACCOUNT);
+  const raw = fromSecret || fromEnv;
+  return raw || null;
 }
 
-/** 환경 변수(예: API KEY) + user.config.js(나머지 설정) + 기본값 합친 최종 설정 */
+/**
+ * 환경 변수(배포 시 덮어쓰기) + 공개 `user.config.js` + 시크릿 파일 또는 env
+ */
 export function resolveConfig() {
-  const envNum = (envKey, fallback) => {
-    const v = process.env[envKey];
-    if (v !== undefined && v !== "") {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
-    }
-    return fallback;
-  };
-
   const llmProvider = String(
     process.env.LLM_PROVIDER ?? userConfig.llmProvider ?? "gemini"
   ).toLowerCase();
 
   const geminiApiKey =
-    process.env.GEMINI_API_KEY ?? userConfig.geminiApiKey ?? "";
+    trimmedOrEmpty(secretConfig.geminiApiKey) ||
+    trimmedOrEmpty(process.env.GEMINI_API_KEY);
   const openaiApiKey =
-    process.env.OPENAI_API_KEY ?? userConfig.openaiApiKey ?? "";
+    trimmedOrEmpty(secretConfig.openaiApiKey) ||
+    trimmedOrEmpty(process.env.OPENAI_API_KEY);
 
   if (llmProvider === "gemini" && !geminiApiKey) {
     throw new Error(
-      "Gemini 사용 시 `GEMINI_API_KEY` 환경 변수를 설정하세요. (또는 LLM_PROVIDER=openai)"
+      "Gemini 사용 시 `GEMINI_API_KEY` 환경 변수 또는 `config/secret.config.js`의 geminiApiKey가 필요합니다. (`secret.config.example.js` 참고)"
     );
   }
   if (llmProvider === "openai" && !openaiApiKey) {
     throw new Error(
-      "OpenAI 사용 시 `OPENAI_API_KEY` 환경 변수를 설정하세요. (또는 LLM_PROVIDER=gemini)"
+      "OpenAI 사용 시 `OPENAI_API_KEY` 환경 변수 또는 `config/secret.config.js`의 openaiApiKey가 필요합니다."
     );
   }
 
@@ -58,7 +62,7 @@ export function resolveConfig() {
     "";
   if (!spreadsheetId) {
     throw new Error(
-      "스프레드시트 ID가 필요합니다. `SPREADSHEET_ID`(또는 `GOOGLE_SHEET_ID`) 환경변수를 설정하세요."
+      "스프레드시트 ID가 필요합니다. `SPREADSHEET_ID`(또는 `GOOGLE_SHEET_ID`) 환경변수 또는 `config/user.config.js`의 spreadsheetId를 설정하세요."
     );
   }
 
@@ -66,8 +70,9 @@ export function resolveConfig() {
     p.startsWith("/") ? p : path.join(projectRoot, p);
 
   const serviceAccountJsonPath = (() => {
-    const p =
-      process.env.SERVICE_ACCOUNT_JSON_PATH ?? userConfig.serviceAccountJsonPath;
+    const fromSecret = trimmedOrEmpty(secretConfig.serviceAccountJsonPath);
+    const fromEnv = trimmedOrEmpty(process.env.SERVICE_ACCOUNT_JSON_PATH);
+    const p = fromSecret || fromEnv;
     if (!p) return path.join(projectRoot, "config", "service-account.json");
     return resolvePathFromRoot(p);
   })();
@@ -77,9 +82,11 @@ export function resolveConfig() {
   ).toLowerCase();
 
   const discordWebhookUrl =
-    process.env.DISCORD_WEBHOOK_URL ?? userConfig.discordWebhookUrl ?? "";
+    trimmedOrEmpty(secretConfig.discordWebhookUrl) ||
+    trimmedOrEmpty(process.env.DISCORD_WEBHOOK_URL);
   const slackWebhookUrl =
-    process.env.SLACK_WEBHOOK_URL ?? userConfig.slackWebhookUrl ?? "";
+    trimmedOrEmpty(secretConfig.slackWebhookUrl) ||
+    trimmedOrEmpty(process.env.SLACK_WEBHOOK_URL);
 
   const newsSourceProvider = String(
     process.env.NEWS_SOURCE_PROVIDER ??
@@ -97,27 +104,33 @@ export function resolveConfig() {
     openaiApiKey,
     openaiModel:
       process.env.OPENAI_MODEL ?? userConfig.openaiModel ?? "gpt-4o-mini",
-    openaiRetryMax: envNum("OPENAI_RETRY_MAX", userConfig.openaiRetryMax ?? 6),
-    openaiRetryBaseMs: envNum(
+    openaiRetryMax: readEnvNumber(
+      "OPENAI_RETRY_MAX",
+      userConfig.openaiRetryMax ?? 6
+    ),
+    openaiRetryBaseMs: readEnvNumber(
       "OPENAI_RETRY_BASE_MS",
       userConfig.openaiRetryBaseMs ?? 2000
     ),
     geminiModel:
       process.env.GEMINI_MODEL ?? userConfig.geminiModel ?? "gemini-2.5-flash",
-    geminiRetryMax: envNum("GEMINI_RETRY_MAX", userConfig.geminiRetryMax ?? 6),
-    geminiRetryBaseMs: envNum(
+    geminiRetryMax: readEnvNumber(
+      "GEMINI_RETRY_MAX",
+      userConfig.geminiRetryMax ?? 6
+    ),
+    geminiRetryBaseMs: readEnvNumber(
       "GEMINI_RETRY_BASE_MS",
       userConfig.geminiRetryBaseMs ?? 2000
     ),
-    delayBetweenKeywordsMs: envNum(
+    delayBetweenKeywordsMs: readEnvNumber(
       "DELAY_BETWEEN_KEYWORDS_MS",
-      userConfig.delayBetweenKeywordsMs ?? 2500
+      userConfig.delayBetweenKeywordsMs ?? 12_000
     ),
     geminiMaxOutputTokens: Math.min(
       8192,
       Math.max(
         1024,
-        envNum(
+        readEnvNumber(
           "GEMINI_MAX_OUTPUT_TOKENS",
           userConfig.geminiMaxOutputTokens ?? 8192
         )
@@ -131,10 +144,8 @@ export function resolveConfig() {
     sheetRange:
       process.env.SHEET_RANGE ?? userConfig.sheetRange ?? "시트1!A:C",
     serviceAccountJsonPath,
-    /** CI에서만 주입하는 경우 */
-    serviceAccountJsonRaw:
-      process.env.GOOGLE_SERVICE_ACCOUNT ??
-      null,
+    /** CI 또는 `secret.config.js`의 googleServiceAccount */
+    serviceAccountJsonRaw: rawServiceAccountFromSecretOrEnv(),
     notifyProvider,
     discordWebhookUrl,
     slackWebhookUrl,

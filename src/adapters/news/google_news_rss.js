@@ -1,4 +1,5 @@
 import axios from "axios";
+import { isLogVerbose } from "../../lib/env.js";
 
 function decodeXmlEntities(s) {
   return s
@@ -23,8 +24,12 @@ export async function fetchRecentIssueHeadlines(keyword, config) {
   const limit = config.newsHeadlineLimit;
   const q = encodeURIComponent(keyword);
   const url = `https://news.google.com/rss/search?q=${q}&hl=ko&gl=KR&ceid=KR:ko`;
+  const verbose = isLogVerbose();
 
   try {
+    if (verbose) {
+      console.log(`    → [News RSS] keyword="${keyword}", limit=${limit}`);
+    }
     const { data: xml } = await axios.get(url, {
       timeout: 20000,
       headers: {
@@ -48,9 +53,18 @@ export async function fetchRecentIssueHeadlines(keyword, config) {
       const title = decodeXmlEntities(tm[1].trim());
       if (title && !headlines.includes(title)) headlines.push(title);
     }
+    if (verbose) {
+      console.log(
+        `    → [News RSS] extracted ${headlines.length} unique titles`
+      );
+      if (headlines.length > 0) {
+        const sample = headlines.slice(0, 2);
+        console.log(`    → [News RSS] sample: ${JSON.stringify(sample)}`);
+      }
+    }
     return headlines;
   } catch (e) {
-    console.warn(`  · 최근 이슈(뉴스) 조회 실패: ${e.message}`);
+    console.warn(`  · 최근 이슈(뉴스) 조회 실패: ${e?.message ?? String(e)}`);
     return [];
   }
 }

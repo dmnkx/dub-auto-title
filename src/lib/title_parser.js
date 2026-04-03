@@ -1,4 +1,6 @@
 import { MIN_TITLE_LENGTH } from "../prompts.js";
+import { isLogVerbose } from "./env.js";
+import { previewOneLine } from "./string.js";
 
 function isPlausibleTitle(s) {
   const t = s.trim();
@@ -33,6 +35,7 @@ function extractJsonArrayString(text) {
  * @returns {string[]}
  */
 export function parseTitlesFromResponse(text) {
+  const verbose = isLogVerbose();
   const raw = text.trim();
   const jsonSlice = extractJsonArrayString(raw);
 
@@ -45,11 +48,16 @@ export function parseTitlesFromResponse(text) {
           .filter(isPlausibleTitle);
         if (out.length >= 5) return out.slice(0, 5);
       }
-    } catch {
+    } catch (e) {
+      if (verbose) {
+        const pl = previewOneLine(jsonSlice, 180);
+        console.warn(
+          `    → [TitleParser] JSON parse 실패: ${e?.message ?? String(e)} preview="${pl.preview}${pl.truncated ? "…" : ""}"`
+        );
+      }
       /* fallthrough */
     }
   }
 
   return parseTitlesFromText(raw).filter(isPlausibleTitle).slice(0, 5);
 }
-

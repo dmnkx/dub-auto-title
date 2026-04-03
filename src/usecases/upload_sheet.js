@@ -1,5 +1,7 @@
-import { formatKstTimestamp } from "../lib/time.js";
 import { createSheetStorage } from "../adapters/storage/factory.js";
+import { isLogVerbose } from "../lib/env.js";
+import { buildTitleSheetRows } from "../lib/sheet_upload_payload.js";
+import { formatKstTimestamp } from "../lib/time.js";
 
 /**
  * @typedef {object} SheetsConfig
@@ -11,26 +13,13 @@ import { createSheetStorage } from "../adapters/storage/factory.js";
  */
 
 /**
- * @param {{ keyword: string; titles: string[] }[]} batch
- * @param {string} runAt
- * @returns {string[][]}
- */
-function buildSheetValues(batch, runAt) {
-  const values = [];
-  for (const { keyword, titles } of batch) {
-    for (const title of titles) {
-      values.push([runAt, keyword, title]);
-    }
-  }
-  return values;
-}
-
-/**
  * 시트에 제목 데이터를 append
  * @param {{ keyword: string; titles: string[] }[]} batch
  * @param {SheetsConfig} config
  */
 export async function uploadAllTitles(batch, config) {
+  const verbose = isLogVerbose();
+
   if (!config.spreadsheetId) {
     throw new Error(
       "스프레드시트 ID가 필요합니다. `SPREADSHEET_ID`(또는 `GOOGLE_SHEET_ID`) 환경 변수를 설정하세요."
@@ -39,7 +28,7 @@ export async function uploadAllTitles(batch, config) {
 
   const storage = createSheetStorage(config);
   const runAt = formatKstTimestamp();
-  const values = buildSheetValues(batch, runAt);
+  const values = buildTitleSheetRows(batch, runAt);
 
   if (values.length === 0) {
     console.log("  (업로드할 행 없음)");
@@ -47,8 +36,20 @@ export async function uploadAllTitles(batch, config) {
   }
 
   console.log(`  · 업로드 range: ${config.sheetRange}`);
-  console.log(`  · 업로드 첫 행 예시: ${JSON.stringify(values[0])}`);
-  await storage.appendRows(config.sheetRange, values);
+  if (verbose) {
+    console.log(`  · 업로드 runAt(KST): ${runAt}`);
+    console.log(
+      `  · 업로드 행 수: ${values.length} (첫 행 예시: ${JSON.stringify(values[0])}, 마지막 행 예시: ${JSON.stringify(values[values.length - 1])})`
+    );
+  } else {
+    console.log(`  · 업로드 첫 행 예시: ${JSON.stringify(values[0])}`);
+  }
+  try {
+    await storage.appendRows(config.sheetRange, values);
+  } catch (err) {
+    console.error(`  · 시트 업로드 실패: ${err?.message ?? String(err)}`);
+    throw err;
+  }
 
   console.log(`  · 시트에 ${values.length}행 추가됨`);
 }

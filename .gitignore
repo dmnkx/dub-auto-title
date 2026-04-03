@@ -14,8 +14,8 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-# 로컬 전용 설정 (gitignored)
-config/user.config.js
+# 로컬 시크릿 / 자격 증명 (gitignored)
+config/secret.config.js
 config/service-account.json
 
 # Build / output

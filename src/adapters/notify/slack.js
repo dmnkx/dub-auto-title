@@ -1,4 +1,4 @@
-import axios from "axios";
+import { createJsonWebhookNotifier } from "./json_webhook.js";
 
 /**
  * Slack Incoming Webhook (간단 텍스트)
@@ -6,27 +6,9 @@ import axios from "axios";
  * @returns {{ send: (message: string) => Promise<void> }}
  */
 export function createSlackNotifier(opts) {
-  const webhookUrl = opts.webhookUrl;
-  return {
-    async send(message) {
-      if (!webhookUrl) return;
-      try {
-        await axios.post(
-          webhookUrl,
-          { text: message },
-          {
-            timeout: 10000,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      } catch (err) {
-        const detail = err?.response?.data
-          ? JSON.stringify(err.response.data)
-          : "";
-        console.warn(
-          `  · Slack 알림 실패: ${err?.message ?? err}${detail ? ` (${detail})` : ""}`
-        );
-      }
-    },
-  };
+  return createJsonWebhookNotifier({
+    webhookUrl: opts.webhookUrl,
+    label: "Slack",
+    buildPayload: (message) => ({ text: message }),
+  });
 }

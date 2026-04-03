@@ -1,11 +1,8 @@
 import { createLlmClient } from "../adapters/llm/factory.js";
 import { createNewsSource } from "../adapters/news/factory.js";
-import {
-  buildPromptFromIssues,
-  buildRegenerateHint,
-} from "../prompts.js";
+import { isLogVerbose } from "../lib/env.js";
 import { sleep } from "../lib/sleep.js";
-import { parseTitlesFromResponse } from "../lib/title_parser.js";
+import { runLlmUntilFiveTitles } from "../lib/llm_title_run.js";
 import { loadKeywords } from "../keywords.js";
 
 /**
@@ -38,56 +35,17 @@ async function generateTitle(keyword, config, llm, news) {
     console.log(`    → 뉴스 없음, 시의성 가정으로 생성`);
   }
 
-  const baseOutTok = Math.min(
-    8192,
-    Math.max(1024, Number(config.geminiMaxOutputTokens) || 8192)
-  );
+  return runLlmUntilFiveTitles(llm, {
+    keyword,
+    headlines,
+    maxOutputTokensBase: config.geminiMaxOutputTokens,
+  });
+}
 
-  let basePrompt = buildPromptFromIssues(keyword, headlines);
-  let titles = [];
-  /** @type {string | undefined} */
-  let lastFinishReason;
-  const apiDelayMs = 12_000;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt === 1) {
-      console.warn("    → 제목이 5개 미만이거나 너무 짧아 1회 재생성");
-      basePrompt = buildPromptFromIssues(keyword, headlines) + buildRegenerateHint();
-    } else if (attempt === 2) {
-      console.warn("    → 출력이 잘렸을 수 있어 maxOutputTokens 상한으로 1회 재시도");
-      basePrompt =
-        buildPromptFromIssues(keyword, headlines) +
-        `\n\n**재시도**: 출력이 중간에 끊기지 않게 JSON 배열만 간결히 완성하라.`;
-    }
-
-    const bumpTokens = attempt === 2 || lastFinishReason === "MAX_TOKENS";
-    const maxOutputTokens = bumpTokens ? 8192 : baseOutTok;
-
-    const { text: raw, finishReason } = await llm.generate(basePrompt, {
-      maxOutputTokens,
-      temperature: attempt === 0 ? 0.55 : 0.45,
-      responseMimeType: "application/json",
-    });
-
-    lastFinishReason = finishReason;
-    const fr = lastFinishReason ? String(lastFinishReason) : "";
-    if (fr && fr.toUpperCase() !== "STOP") {
-      console.warn(`    → LLM finishReason: ${lastFinishReason}`);
-    }
-
-    titles = parseTitlesFromResponse(raw ?? "");
-    const shouldTryAgain = titles.length !== 5 && attempt < 2;
-    if (shouldTryAgain) await sleep(apiDelayMs);
-    if (titles.length === 5) break;
-  }
-
-  if (titles.length !== 5) {
-    throw new Error(
-      `「${keyword}」제목을 5개 만들지 못했습니다 (현재 ${titles.length}개). 나중에 다시 실행하거나 프롬프트·모델을 확인하세요.`
-    );
-  }
-
-  return titles;
+function resolveLlmModelLabel(config) {
+  return config.llmProvider === "openai"
+    ? config.openaiModel
+    : config.geminiModel;
 }
 
 /**
@@ -98,24 +56,41 @@ async function generateTitle(keyword, config, llm, news) {
 export async function generateAllTitles(config) {
   const llm = createLlmClient(config);
   const news = createNewsSource(config);
+  const verbose = isLogVerbose();
 
   const keywords = loadKeywords();
   if (!Array.isArray(keywords) || keywords.length === 0) {
     throw new Error("config/keywords.json에 키워드가 없습니다.");
   }
 
-  const list = keywords
-    .map((k) => String(k).trim())
-    .filter(Boolean);
+  const list = keywords.map((k) => String(k).trim()).filter(Boolean);
+
+  const gap = Math.max(0, Number(config.delayBetweenKeywordsMs) || 0);
+
+  if (verbose) {
+    console.log(`  · 키워드 개수: ${list.length}`);
+    console.log(
+      `  · LLM 설정: ${config.llmProvider} / model=${resolveLlmModelLabel(config)}`
+    );
+    console.log(`  · 키워드 간 간격: ${gap}ms (마지막 키워드 다음에는 대기 없음)`);
+  }
 
   const results = [];
-  const gap = 12_000;
 
   for (let i = 0; i < list.length; i++) {
     const trimmed = list[i];
+    const keywordStartedAt = Date.now();
     console.log(`  · 제목 생성: "${trimmed}"`);
     const titles = await generateTitle(trimmed, config, llm, news);
     results.push({ keyword: trimmed, titles });
+    if (verbose) {
+      console.log(
+        `    → 완료: ${titles.length}개, 소요 ${Math.round(
+          (Date.now() - keywordStartedAt) / 1000
+        )}초`
+      );
+      console.log(`    → 제목 후보: ${JSON.stringify(titles)}`);
+    }
 
     if (gap > 0 && i < list.length - 1) {
       await sleep(gap);

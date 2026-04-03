@@ -1,6 +1,7 @@
 import { createDiscordNotifier } from "./discord.js";
 import { createSlackNotifier } from "./slack.js";
 import { createNoopNotifier } from "./noop.js";
+import { isLogVerbose } from "../../lib/env.js";
 
 /**
  * @param {object} config
@@ -10,7 +11,16 @@ import { createNoopNotifier } from "./noop.js";
  * @returns {{ send: (message: string) => Promise<void> }}
  */
 export function createNotifyClient(config) {
+  const verbose = isLogVerbose();
+
   const provider = String(config.notifyProvider ?? "discord").toLowerCase();
+  if (verbose) {
+    console.log(
+      `  · [Notify] provider=${provider} (discordWebhookUrl=${
+        config.discordWebhookUrl ? "set" : "empty"
+      }, slackWebhookUrl=${config.slackWebhookUrl ? "set" : "empty"})`
+    );
+  }
 
   if (provider === "none") {
     return createNoopNotifier();
